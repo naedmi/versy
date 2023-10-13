@@ -14,9 +14,10 @@ public class Broker {
     private final Endpoint endpoint = new Endpoint(4711);
     private final ClientCollection<InetSocketAddress> clients = new ClientCollection<>();
     private int nextId = 0;
+    private boolean done = false;
 
     public void broker() {
-        while (true) {
+        while (!done) {
             Message message = this.endpoint.blockingReceive();
             Serializable request = message.getPayload();
             InetSocketAddress sender = message.getSender();
@@ -46,6 +47,9 @@ public class Broker {
         if (clients.indexOf(sender) == -1) {
             System.out.println("Client not registered: " + sender);
             return;
+        }
+        if (clients.size() == 1) {
+            done = true;
         }
         clients.remove(clients.indexOf(sender));
     }
