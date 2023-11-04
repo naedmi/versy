@@ -1,9 +1,6 @@
 package aqua.blatt1.broker;
 
-import aqua.blatt1.common.msgtypes.DeregisterRequest;
-import aqua.blatt1.common.msgtypes.HandoffRequest;
-import aqua.blatt1.common.msgtypes.RegisterRequest;
-import aqua.blatt1.common.msgtypes.RegisterResponse;
+import aqua.blatt1.common.msgtypes.*;
 import aqua.blatt2.broker.PoisonPill;
 import messaging.Endpoint;
 import messaging.Message;
@@ -44,6 +41,7 @@ public class Broker {
 
     public static void main(String[] args) {
         new Broker().broker();
+
     }
 
     private class BrokerTask implements Runnable {
@@ -78,20 +76,60 @@ public class Broker {
                 return;
             }
             clients.add("tank" + nextId, sender);
-            endpoint.send(sender, new RegisterResponse("tank" + nextId++));
+
+            switch (clients.size()) {
+                case 1:
+                    endpoint.send(sender, new RegisterResponse("tank" + nextId++));
+                    endpoint.send(sender, new NeighborUpdate(sender, sender));
+                    endpoint.send(sender, new Token());
+                    break;
+                case 2:
+                    endpoint.send(sender, new RegisterResponse("tank" + nextId++));
+                    InetSocketAddress neighbor = clients.getLeftNeighborOf(clients.indexOf(sender));
+
+                    endpoint.send(neighbor, new NeighborUpdate(sender, sender));
+                    endpoint.send(sender, new NeighborUpdate(neighbor, neighbor));
+                    break;
+                default:
+                    endpoint.send(sender, new RegisterResponse("tank" + nextId++));
+
+                    InetSocketAddress leftNeighbor = clients.getLeftNeighborOf(clients.indexOf(sender));
+                    InetSocketAddress rightNeighbor = clients.getRightNeighborOf(clients.indexOf(sender));
+
+                    updateNeighbors(leftNeighbor);
+                    updateNeighbors(rightNeighbor);
+            }
+
             lock.writeLock().unlock();
+        }
+
+        private void updateNeighbors(InetSocketAddress neighbor) {
+            int neighborIndex = clients.indexOf(neighbor);
+            endpoint.send(neighbor, new NeighborUpdate(
+                    clients.getLeftNeighborOf(neighborIndex),
+                    clients.getRightNeighborOf(neighborIndex)));
+
         }
 
         private void deregister(InetSocketAddress sender) {
             lock.writeLock().lock();
-            if (clients.indexOf(sender) == -1) {
+            int index = clients.indexOf(sender);
+            if (index == -1) {
                 System.out.println("Client not registered: " + sender);
                 return;
             }
             if (clients.size() == 1) {
                 stopRequested = true;
             }
+
+            InetSocketAddress leftNeighbor = clients.getLeftNeighborOf(index);
+            InetSocketAddress rightNeighbor = clients.getRightNeighborOf(index);
+
             clients.remove(clients.indexOf(sender));
+
+            updateNeighbors(leftNeighbor);
+            updateNeighbors(rightNeighbor);
+
             lock.writeLock().unlock();
         }
 

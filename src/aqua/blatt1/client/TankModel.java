@@ -1,15 +1,14 @@
 package aqua.blatt1.client;
 
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.Observable;
-import java.util.Random;
-import java.util.Set;
+import java.net.InetSocketAddress;
+import java.time.Duration;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 import aqua.blatt1.common.Direction;
 import aqua.blatt1.common.FishModel;
+import aqua.blatt1.common.msgtypes.NeighborUpdate;
 
 public class TankModel extends Observable implements Iterable<FishModel> {
 
@@ -21,6 +20,10 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 	protected final Set<FishModel> fishies;
 	protected int fishCounter = 0;
 	protected final ClientCommunicator.ClientForwarder forwarder;
+	private InetSocketAddress leftNeighbor;
+	private InetSocketAddress rightNeighbor;
+	protected boolean token = false;
+	protected Timer timer = new Timer();
 
 	public TankModel(ClientCommunicator.ClientForwarder forwarder) {
 		this.fishies = Collections.newSetFromMap(new ConcurrentHashMap<FishModel, Boolean>());
@@ -49,6 +52,26 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 		fishies.add(fish);
 	}
 
+	synchronized void handleNeighborUpdate(NeighborUpdate update) {
+		leftNeighbor = update.getLeftNeighbor();
+		rightNeighbor = update.getRightNeighbor();
+	}
+
+	synchronized void receiveToken() {
+		token = true;
+		timer.schedule(new TimerTask() {
+			@Override
+			public void run() {
+				token = false;
+				forwarder.handOffToken(leftNeighbor);
+			}
+		}, Duration.ofSeconds(5).toMillis());
+	}
+
+	synchronized boolean hasToken() {
+		return token;
+	}
+
 	public String getId() {
 		return id;
 	}
@@ -67,8 +90,17 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 
 			fish.update();
 
-			if (fish.hitsEdge())
-				forwarder.handOff(fish);
+			if (fish.hitsEdge()) {
+				if (token) {
+					if (fish.getDirection() == Direction.LEFT) {
+						forwarder.handOff(fish, leftNeighbor);
+					} else {
+						forwarder.handOff(fish, rightNeighbor);
+					}
+				} else {
+					fish.reverse();
+				}
+            }
 
 			if (fish.disappears())
 				it.remove();
