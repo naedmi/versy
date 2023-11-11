@@ -2,6 +2,7 @@ package aqua.blatt1.client;
 
 import java.net.InetSocketAddress;
 
+import aqua.blatt1.client.snapshot.Snapshot;
 import aqua.blatt1.common.Direction;
 import aqua.blatt1.common.msgtypes.*;
 import messaging.Endpoint;
@@ -38,6 +39,14 @@ public class ClientCommunicator {
 		public void handOffToken(InetSocketAddress neighbor) {
 			endpoint.send(neighbor, new Token());
 		}
+
+		public void sendSnapshotMarker(InetSocketAddress neighbor) {
+			endpoint.send(neighbor, new SnapshotMarker());
+		}
+
+		public void sendSnapshotToken(InetSocketAddress neighbor, SnapshotToken snapshotToken) {
+			endpoint.send(neighbor, snapshotToken);
+		}
 	}
 
 	public class ClientReceiver extends Thread {
@@ -58,13 +67,17 @@ public class ClientCommunicator {
 				if (msg.getPayload() instanceof HandoffRequest)
 					tankModel.receiveFish(((HandoffRequest) msg.getPayload()).getFish());
 
-				if (msg.getPayload() instanceof NeighborUpdate) {
+				if (msg.getPayload() instanceof NeighborUpdate)
 					tankModel.handleNeighborUpdate((NeighborUpdate) msg.getPayload());
-				}
 
-				if (msg.getPayload() instanceof Token) {
+				if (msg.getPayload() instanceof Token)
 					tankModel.receiveToken();
-				}
+
+				if (msg.getPayload() instanceof SnapshotMarker)
+					tankModel.receiveSnapshotMarker(msg.getSender());
+
+				if (msg.getPayload() instanceof SnapshotToken)
+					tankModel.receiveSnapshotToken(msg.getSender(), (SnapshotToken) msg.getPayload());
 
 			System.out.println("Receiver stopped.");
 			}

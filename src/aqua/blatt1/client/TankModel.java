@@ -3,12 +3,18 @@ package aqua.blatt1.client;
 import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.util.*;
+import java.util.Timer;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
+import aqua.blatt1.client.snapshot.Snapshot;
+import aqua.blatt1.client.snapshot.SnapshotMode;
 import aqua.blatt1.common.Direction;
 import aqua.blatt1.common.FishModel;
 import aqua.blatt1.common.msgtypes.NeighborUpdate;
+import aqua.blatt1.common.msgtypes.SnapshotToken;
+
+import javax.swing.*;
 
 public class TankModel extends Observable implements Iterable<FishModel> {
 
@@ -24,6 +30,11 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 	private InetSocketAddress rightNeighbor;
 	protected boolean token = false;
 	protected Timer timer = new Timer();
+	protected Snapshot snapshot;
+	protected SnapshotMode snapshotMode;
+	protected SnapshotToken snapshotToken;
+	protected Thread snapshotTokenHandOff;
+	protected boolean initiator = false;
 
 	public TankModel(ClientCommunicator.ClientForwarder forwarder) {
 		this.fishies = Collections.newSetFromMap(new ConcurrentHashMap<FishModel, Boolean>());
@@ -48,6 +59,9 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 	}
 
 	synchronized void receiveFish(FishModel fish) {
+		if (snapshotMode != SnapshotMode.IDLE) {
+			snapshot.updateNumberOfFish(1);
+		}
 		fish.setToStart();
 		fishies.add(fish);
 	}
@@ -66,6 +80,84 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 				forwarder.handOffToken(leftNeighbor);
 			}
 		}, Duration.ofSeconds(5).toMillis());
+	}
+
+	synchronized void receiveSnapshotMarker(InetSocketAddress sender) {
+		switch (snapshotMode) {
+			case IDLE:
+				this.snapshot = new Snapshot(fishies.size());
+				snapshotMode = (sender == leftNeighbor)
+						? SnapshotMode.RIGHT
+						: SnapshotMode.LEFT;
+
+				forwarder.sendSnapshotMarker(leftNeighbor);
+				forwarder.sendSnapshotMarker(rightNeighbor);
+				break;
+			case BOTH:
+				snapshotMode = (sender == leftNeighbor)
+						? SnapshotMode.RIGHT
+						: SnapshotMode.LEFT;
+				break;
+			case LEFT:
+				if (sender.equals(this.leftNeighbor))
+					snapshotMode = SnapshotMode.IDLE;
+				break;
+			case RIGHT:
+				if (sender.equals(this.rightNeighbor))
+					snapshotMode = SnapshotMode.IDLE;
+				break;
+		}
+
+		if (snapshotMode == SnapshotMode.IDLE) {
+			snapshot.setDone();
+		}
+
+		if (this.snapshot.isDone() && this.snapshotToken != null) {
+			System.out.println("Initiator send snapshot token");
+			this.snapshotToken.updateNumberOfFish(this.snapshot.getNumberOfFish());
+			forwarder.sendSnapshotToken(leftNeighbor, this.snapshotToken);
+
+			this.snapshot = null;
+			this.snapshotToken = null;
+		}
+	}
+
+	public void receiveSnapshotToken(InetSocketAddress sender, SnapshotToken token) {
+		if (this.initiator) {
+			new Thread(() ->
+					JOptionPane.showMessageDialog(null,
+							"Global Snapshot: " + token.getNumberOfFish())).start();
+			this.initiator = false;
+		} else {
+
+			if (this.snapshotTokenHandOff != null) {
+				return;
+			}
+
+			this.snapshotTokenHandOff = new Thread(() -> {
+				while(!this.snapshot.isDone()) {
+					Thread.onSpinWait();
+				}
+
+				System.out.println("Client updated snapshot and handoff token");
+				token.updateNumberOfFish(this.snapshot.getNumberOfFish());
+				forwarder.sendSnapshotToken(this.leftNeighbor, token);
+
+				this.snapshot = null;
+				this.snapshotTokenHandOff = null;
+			});
+			this.snapshotTokenHandOff.start();
+		}
+		this.snapshotToken = null;
+	}
+
+	public void initiateSnapshot() {
+		this.initiator = true;
+		this.snapshot = new Snapshot(fishies.size());
+		this.snapshotMode = SnapshotMode.BOTH;
+		// this.snapshotToken = new SnapshotToken();
+		forwarder.sendSnapshotMarker(leftNeighbor);
+		forwarder.sendSnapshotMarker(rightNeighbor);
 	}
 
 	synchronized boolean hasToken() {
@@ -129,5 +221,4 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 	public synchronized void finish() {
 		forwarder.deregister(id);
 	}
-
 }
