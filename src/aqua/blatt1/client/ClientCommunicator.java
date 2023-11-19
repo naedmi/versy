@@ -49,6 +49,14 @@ public class ClientCommunicator {
 		public void sendLocationRequest(InetSocketAddress neighbor, String id) {
 			endpoint.send(neighbor, new LocationRequest(id));
 		}
+
+		public void sendNameResolutionRequest(String tankId, String requestId) {
+			endpoint.send(broker, new NameResolutionRequest(tankId, requestId));
+		}
+
+		public void sendLocationUpdate(InetSocketAddress target, String fishId) {
+			endpoint.send(target, new LocationUpdate(fishId));
+		}
 	}
 
 	public class ClientReceiver extends Thread {
@@ -82,7 +90,14 @@ public class ClientCommunicator {
 					tankModel.receiveSnapshotToken(msg.getSender(), (SnapshotToken) msg.getPayload());
 
 				if (msg.getPayload() instanceof LocationRequest)
-					tankModel.locateFishGlobally(((LocationRequest) msg.getPayload()).getId());
+					tankModel.locateFishLocally(((LocationRequest) msg.getPayload()).getId());
+
+				if (msg.getPayload() instanceof NameResolutionResponse)
+					tankModel.sendLocationUpdate(((NameResolutionResponse) msg.getPayload()).getAddress(),
+							((NameResolutionResponse) msg.getPayload()).getRequestId());
+
+				if (msg.getPayload() instanceof LocationUpdate)
+					tankModel.updateLocation(msg.getSender(), ((LocationUpdate) msg.getPayload()).getFishId());
 
 			System.out.println("Receiver stopped.");
 			}

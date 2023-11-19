@@ -64,6 +64,8 @@ public class Broker {
                 handoffFish(sender, (HandoffRequest) request);
             } else if (request instanceof PoisonPill) {
                 stopRequested = true;
+            } else if (request instanceof NameResolutionRequest) {
+                resolveName(sender, (NameResolutionRequest) request);
             } else {
                 System.out.println("Unknown request: " + request);
             }
@@ -151,6 +153,14 @@ public class Broker {
                     return;
             }
             endpoint.send(neighbor, request);
+            lock.readLock().unlock();
+        }
+
+        private void resolveName(InetSocketAddress sender, NameResolutionRequest request) {
+            lock.readLock().lock();
+            InetSocketAddress target = clients.getClient(clients.indexOf(request.getTankId()));
+            endpoint.send(sender, new NameResolutionResponse(target, request.getRequestId()));
+            System.out.println("Resolved name: " + request.getTankId() + " to " + target);
             lock.readLock().unlock();
         }
     }
