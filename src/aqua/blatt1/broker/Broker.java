@@ -7,9 +7,11 @@ import messaging.Message;
 
 import java.io.Serializable;
 import java.net.InetSocketAddress;
-import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -21,9 +23,9 @@ public class Broker {
     private final Endpoint endpoint = new Endpoint(4711);
     public ClientCollection<InetSocketAddress> clients = new ClientCollection<>();
     private final ExecutorService executor = newFixedThreadPool(NUMTHREADS);
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
     private int nextId = 0;
     private boolean stopRequested = false;
-    private final Timer timer = new Timer();
 
     public void broker() {
         Thread backgroundThread = new Thread(() -> {
@@ -37,13 +39,14 @@ public class Broker {
             Serializable request = message.getPayload();
             InetSocketAddress sender = message.getSender();
             executor.execute(new BrokerTask(request, sender));
+            scheduler.scheduleAtFixedRate(
+                    new TimerTask() {
+                            @Override
+                            public void run() {
+                                new BrokerTask().removeExpiredClients();
+                            }
+                        }, 30000, 30000, TimeUnit.MILLISECONDS);
 
-            timer.schedule(new TimerTask() {
-                @Override
-                public void run() {
-                    new BrokerTask().removeExpiredClients();
-                }
-            }, 20000);
         }
         executor.shutdown();
         System.exit(0);
@@ -51,7 +54,6 @@ public class Broker {
 
     public static void main(String[] args) {
         new Broker().broker();
-
     }
 
     private class BrokerTask implements Runnable {
@@ -94,8 +96,10 @@ public class Broker {
             }
             if (clients.indexOf(sender) != -1 ) {
                 clients.setTimestamp(clients.indexOf(sender), System.currentTimeMillis());
+                System.out.println("Updated timestamp of client: " + sender);
             } else {
                 clients.add("tank" + nextId, sender, System.currentTimeMillis());
+                System.out.println("Registered new client: " + sender);
             }
 
             switch (clients.size()) {
@@ -177,6 +181,10 @@ public class Broker {
 
         private void resolveName(InetSocketAddress sender, NameResolutionRequest request) {
             lock.readLock().lock();
+            if (clients.indexOf(request.getTankId()) == -1) {
+                System.out.println("Client not registered: " + request.getTankId());
+                return;
+            }
             InetSocketAddress target = clients.getClient(clients.indexOf(request.getTankId()));
             endpoint.send(sender, new NameResolutionResponse(target, request.getRequestId()));
             System.out.println("Resolved name: " + request.getTankId() + " to " + target);
@@ -190,6 +198,7 @@ public class Broker {
             for (int i = 0; i < clients.size(); i++) {
                 if (clients.getTimestamp(i) + 20000 < now) {
                     deregister(clients.getClient(i));
+                    System.out.println("Removed expired client: " + clients.getClient(i));
                 }
             }
             lock.writeLock().unlock();

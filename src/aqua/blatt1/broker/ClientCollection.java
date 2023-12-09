@@ -1,6 +1,5 @@
 package aqua.blatt1.broker;
 
-import java.security.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -29,17 +28,15 @@ public class ClientCollection<T> {
 	private final List<Client> clients;
 
 	public ClientCollection() {
-		clients = new ArrayList<Client>();
+		clients = new ArrayList<>();
 	}
 
-	public ClientCollection<T> add(String id, T client, long timestamp) {
+	public void add(String id, T client, long timestamp) {
 		clients.add(new Client(id, client, timestamp));
-		return this;
 	}
 
-	public ClientCollection<T> remove(int index) {
+	public void remove(int index) {
 		clients.remove(index);
-		return this;
 	}
 
 	public int indexOf(String id) {

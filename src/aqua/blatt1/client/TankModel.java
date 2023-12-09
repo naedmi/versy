@@ -5,6 +5,8 @@ import java.time.Duration;
 import java.util.*;
 import java.util.Timer;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import aqua.blatt1.client.snapshot.Snapshot;
@@ -30,6 +32,7 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 	private InetSocketAddress rightNeighbor;
 	protected boolean token = false;
 	protected Timer timer = new Timer();
+	protected ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 	protected Snapshot snapshot;
 	protected SnapshotMode snapshotMode;
 	protected SnapshotToken snapshotToken;
@@ -46,18 +49,14 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 		this.id = id;
 		newFish(WIDTH - FishModel.getXSize(), rand.nextInt(HEIGHT - FishModel.getYSize()));
 
-		timer.schedule(new TimerTask() {
-			@Override
-			public void run() {
-				forwarder.register(); // renew registration
-			}
-		}, leaseTime / 2);
+		// renew registration
+		scheduler.scheduleAtFixedRate(forwarder::register, 0, leaseTime / 2, TimeUnit.MILLISECONDS);
 	}
 
 	public synchronized void newFish(int x, int y) {
 		if (fishies.size() < MAX_FISHIES) {
-			x = x > WIDTH - FishModel.getXSize() - 1 ? WIDTH - FishModel.getXSize() - 1 : x;
-			y = y > HEIGHT - FishModel.getYSize() ? HEIGHT - FishModel.getYSize() : y;
+			x = Math.min(x, WIDTH - FishModel.getXSize() - 1);
+			y = Math.min(y, HEIGHT - FishModel.getYSize());
 
 			FishModel fish = new FishModel("fish" + (++fishCounter) + "@" + getId(), x, y,
 					rand.nextBoolean() ? Direction.LEFT : Direction.RIGHT);
