@@ -42,9 +42,16 @@ public class TankModel extends Observable implements Iterable<FishModel> {
 		this.forwarder = forwarder;
 	}
 
-	synchronized void onRegistration(String id) {
+	synchronized void onRegistration(String id, long leaseTime) {
 		this.id = id;
 		newFish(WIDTH - FishModel.getXSize(), rand.nextInt(HEIGHT - FishModel.getYSize()));
+
+		timer.schedule(new TimerTask() {
+			@Override
+			public void run() {
+				forwarder.register(); // renew registration
+			}
+		}, leaseTime / 2);
 	}
 
 	public synchronized void newFish(int x, int y) {

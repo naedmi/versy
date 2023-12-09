@@ -7,6 +7,8 @@ import messaging.Message;
 
 import java.io.Serializable;
 import java.net.InetSocketAddress;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -21,6 +23,7 @@ public class Broker {
     private final ExecutorService executor = newFixedThreadPool(NUMTHREADS);
     private int nextId = 0;
     private boolean stopRequested = false;
+    private final Timer timer = new Timer();
 
     public void broker() {
         Thread backgroundThread = new Thread(() -> {
@@ -34,6 +37,13 @@ public class Broker {
             Serializable request = message.getPayload();
             InetSocketAddress sender = message.getSender();
             executor.execute(new BrokerTask(request, sender));
+
+            timer.schedule(new TimerTask() {
+                @Override
+                public void run() {
+                    new BrokerTask().removeExpiredClients();
+                }
+            }, 20000);
         }
         executor.shutdown();
         System.exit(0);
@@ -52,6 +62,11 @@ public class Broker {
         public BrokerTask(Serializable request, InetSocketAddress sender) {
             this.request = request;
             this.sender = sender;
+        }
+
+        public BrokerTask() {
+            this.request = null;
+            this.sender = null;
         }
 
         @Override
@@ -77,23 +92,27 @@ public class Broker {
                 System.out.println("Client already registered: " + sender);
                 return;
             }
-            clients.add("tank" + nextId, sender);
+            if (clients.indexOf(sender) != -1 ) {
+                clients.setTimestamp(clients.indexOf(sender), System.currentTimeMillis());
+            } else {
+                clients.add("tank" + nextId, sender, System.currentTimeMillis());
+            }
 
             switch (clients.size()) {
                 case 1:
-                    endpoint.send(sender, new RegisterResponse("tank" + nextId++));
+                    endpoint.send(sender, new RegisterResponse("tank" + nextId++, 10000));
                     endpoint.send(sender, new NeighborUpdate(sender, sender));
                     endpoint.send(sender, new Token());
                     break;
                 case 2:
-                    endpoint.send(sender, new RegisterResponse("tank" + nextId++));
+                    endpoint.send(sender, new RegisterResponse("tank" + nextId++, 10000));
                     InetSocketAddress neighbor = clients.getLeftNeighborOf(clients.indexOf(sender));
 
                     endpoint.send(neighbor, new NeighborUpdate(sender, sender));
                     endpoint.send(sender, new NeighborUpdate(neighbor, neighbor));
                     break;
                 default:
-                    endpoint.send(sender, new RegisterResponse("tank" + nextId++));
+                    endpoint.send(sender, new RegisterResponse("tank" + nextId++, 10000));
 
                     InetSocketAddress leftNeighbor = clients.getLeftNeighborOf(clients.indexOf(sender));
                     InetSocketAddress rightNeighbor = clients.getRightNeighborOf(clients.indexOf(sender));
@@ -162,6 +181,18 @@ public class Broker {
             endpoint.send(sender, new NameResolutionResponse(target, request.getRequestId()));
             System.out.println("Resolved name: " + request.getTankId() + " to " + target);
             lock.readLock().unlock();
+        }
+
+        private void removeExpiredClients() {
+            lock.writeLock().lock();
+            long now = System.currentTimeMillis();
+
+            for (int i = 0; i < clients.size(); i++) {
+                if (clients.getTimestamp(i) + 20000 < now) {
+                    deregister(clients.getClient(i));
+                }
+            }
+            lock.writeLock().unlock();
         }
     }
 }

@@ -1,5 +1,6 @@
 package aqua.blatt1.broker;
 
+import java.security.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -12,10 +13,16 @@ public class ClientCollection<T> {
 	private class Client {
 		final String id;
 		final T client;
+		long timestamp;
 
-		Client(String id, T client) {
+		Client(String id, T client, long timestamp) {
 			this.id = id;
 			this.client = client;
+			this.timestamp = timestamp;
+		}
+
+		public void setTimestamp(long timestamp) {
+			this.timestamp = timestamp;
 		}
 	}
 
@@ -25,8 +32,8 @@ public class ClientCollection<T> {
 		clients = new ArrayList<Client>();
 	}
 
-	public ClientCollection<T> add(String id, T client) {
-		clients.add(new Client(id, client));
+	public ClientCollection<T> add(String id, T client, long timestamp) {
+		clients.add(new Client(id, client, timestamp));
 		return this;
 	}
 
@@ -63,6 +70,14 @@ public class ClientCollection<T> {
 
 	public T getRightNeighborOf(int index) {
 		return index < clients.size() - 1 ? clients.get(index + 1).client : clients.get(0).client;
+	}
+
+	public void setTimestamp(int index, long timestamp) {
+		clients.get(index).setTimestamp(timestamp);
+	}
+
+	public long getTimestamp(int index) {
+		return clients.get(index).timestamp;
 	}
 
 }
