@@ -10,6 +10,7 @@ import javax.crypto.NoSuchPaddingException;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.Serializable;
 import java.net.InetSocketAddress;
+import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 
 public class SecureEndpoint extends Endpoint {
@@ -42,8 +43,9 @@ public class SecureEndpoint extends Endpoint {
 
     public void send(InetSocketAddress receiver, Serializable payload) {
         try {
+            encryptCipher.init(Cipher.ENCRYPT_MODE, key);
             encryptCipher.doFinal(payload.toString().getBytes());
-        } catch (IllegalBlockSizeException | BadPaddingException e) {
+        } catch (IllegalBlockSizeException | BadPaddingException | InvalidKeyException e) {
             throw new RuntimeException(e);
         }
         endpoint.send(receiver, payload);
@@ -52,8 +54,9 @@ public class SecureEndpoint extends Endpoint {
     public Message blockingReceive() {
         Message message = endpoint.blockingReceive();
         try {
+            decryptCipher.init(Cipher.DECRYPT_MODE, key);
             decryptCipher.doFinal(message.getPayload().toString().getBytes());
-        } catch (IllegalBlockSizeException | BadPaddingException e) {
+        } catch (IllegalBlockSizeException | BadPaddingException | InvalidKeyException e) {
             throw new RuntimeException(e);
         }
         return message;
@@ -62,8 +65,9 @@ public class SecureEndpoint extends Endpoint {
     public Message nonBlockingReceive() {
         Message message = endpoint.nonBlockingReceive();
         try {
+            decryptCipher.init(Cipher.DECRYPT_MODE, key);
             decryptCipher.doFinal(message.getPayload().toString().getBytes());
-        } catch (IllegalBlockSizeException | BadPaddingException e) {
+        } catch (IllegalBlockSizeException | BadPaddingException | InvalidKeyException e) {
             throw new RuntimeException(e);
         }
         return message;
