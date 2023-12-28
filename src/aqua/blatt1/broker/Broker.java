@@ -2,7 +2,7 @@ package aqua.blatt1.broker;
 
 import aqua.blatt1.common.msgtypes.*;
 import aqua.blatt2.broker.PoisonPill;
-import messaging.Endpoint;
+import aqua.blatt7.SecureEndpoint;
 import messaging.Message;
 
 import java.io.Serializable;
@@ -20,7 +20,7 @@ import static javax.swing.JOptionPane.showMessageDialog;
 
 public class Broker {
     private static final int NUMTHREADS = 10;
-    private final Endpoint endpoint = new Endpoint(4711);
+    private final SecureEndpoint endpoint = new SecureEndpoint(4711);
     public ClientCollection<InetSocketAddress> clients = new ClientCollection<>();
     private final ExecutorService executor = newFixedThreadPool(NUMTHREADS);
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();

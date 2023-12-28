@@ -2,19 +2,18 @@ package aqua.blatt1.client;
 
 import java.net.InetSocketAddress;
 import java.util.Timer;
-import java.util.TimerTask;
 
 import aqua.blatt1.common.msgtypes.*;
-import messaging.Endpoint;
+import aqua.blatt7.SecureEndpoint;
 import messaging.Message;
 import aqua.blatt1.common.FishModel;
 import aqua.blatt1.common.Properties;
 
 public class ClientCommunicator {
-	private final Endpoint endpoint;
+	private final SecureEndpoint endpoint;
 
 	public ClientCommunicator() {
-		endpoint = new Endpoint();
+		endpoint = new SecureEndpoint();
 	}
 
 	public class ClientForwarder {
